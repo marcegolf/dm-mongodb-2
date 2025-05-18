@@ -1,0 +1,87 @@
+.env
+
+# ------------------------
+# Betriebssystem
+# ------------------------
+# macOS
+.DS_Store
+# Windows
+Thumbs.db
+desktop.ini
+
+# ------------------------
+# Visual Studio Code
+# ------------------------
+.vscode/
+# Optional: Arbeitsbereicheinstellungen
+*.code-workspace
+
+# ------------------------
+# Sprachen & Frameworks
+# ------------------------
+#
+xsl-out/
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+env/
+
+# Java
+*.class
+*.jar
+*.war
+*.ear
+target/
+
+# .NET / C#
+bin/
+obj/
+*.user
+*.suo
+
+# C / C++
+*.o
+*.obj
+*.exe
+*.dll
+build/
+out/
+
+# Go
+*.exe
+*.dll
+*.so
+*.dylib
+vendor/
+
+# Ruby
+*.gem
+*.rbc
+.bundle/
+vendor/bundle/
+
+# PHP
+vendor/
+composer.lock
+
+# ------------------------
+# Logs & Reports
+# ------------------------
+logs/
+*.log
+report.[0-9]*.[0-9]*.json
+
+# ------------------------
+# Sonstige temporäre Dateien
+# ------------------------
+*.tmp
+~*
+*.swp
