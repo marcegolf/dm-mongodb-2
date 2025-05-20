@@ -44,116 +44,78 @@ public class App {
         // Create a new client and connect to the server
         try (MongoClient mongoClient = MongoClients.create(settings)) {
             try {
-                // Send a ping to confirm a successful connection
-                MongoDatabase movieDB = mongoClient.getDatabase("general");
-                MongoCollection<Document> collection = movieDB.getCollection("movies");
-                System.out.println("Found " + collection.countDocuments() + " movies");
+                MongoDatabase recipeDB = mongoClient.getDatabase("general");
+                MongoCollection<Document> movieCol = recipeDB.getCollection("movies");
+                System.out.println("Found " + movieCol.countDocuments() + " movies");
 
-                // Prompt user for an ingredient
+                // let the user select a year
                 Scanner keyScan = new Scanner(System.in);
-                System.out.println("Enter an year: ");
-                String inputYear = keyScan.nextLine();
+                System.out.print("Select a year\n> ");
+                int year = keyScan.nextInt();
 
-                // Convert the user input to a long
-                long yearValue = Long.parseLong(inputYear);
+                AggregateIterable<Document> movieOfYear = movieCol.aggregate(
+                        Arrays.asList(new Document("$match",
+                                new Document("year", year)),
+                                new Document("$count", "moviecount")));
 
-                AggregateIterable<Document> movieCol = collection.aggregate(Arrays.asList(new Document("$match", 
-                    new Document("year", yearValue)), 
-                    new Document("$count", "moviecount")));
-                
-                System.out.println("Count for " + inputYear + ": " + movieCol.first().get("moviecount"));
+                System.out.println("Count for " + year + ": " + movieOfYear.first().get("moviecount"));
 
-                // Create the aggregation pipeline
-                AggregateIterable<Document> genresOfYear = collection.aggregate(
-                    Arrays.asList(
-                        new Document("$match", new Document("year", yearValue)),
-                        new Document("$unwind", "$genres"),
-                        new Document("$group", new Document("_id", "$genres"))
-                    )
-                );
+                // genres of year
+                AggregateIterable<Document> genresOfYear = movieCol.aggregate(Arrays.asList(new Document("$match",
+                        new Document("year", year)),
+                        new Document("$unwind",
+                                new Document("path", "$genres")),
+                        new Document("$group",
+                                new Document("_id", "$genres"))));
 
-                ArrayList<Document> genresList= genresOfYear.into(new ArrayList<Document>());
-                for (Integer i = 0; i < genresList.size(); i++) {
+                ArrayList<Document> genresList = genresOfYear.into(new ArrayList<Document>());
+                for (int i = 0; i < genresList.size(); i++) {
                     System.out.println((i + 1) + ": " + genresList.get(i).get("_id"));
                 }
 
-                System.out.println("Select a genre (1-" + genresList.size() + "):");
-                Integer choice = keyScan.nextInt();
+                // let the user select a genre
+                System.out.print("Select a genre (1-" + genresList.size() + ") \n> ");
+                int gIndex = keyScan.nextInt();
+                String genre = genresList.get(gIndex - 1).get("_id").toString();
+                System.out.println("Selected " + genre);
 
-                String selectedGenre = genresList.get(choice - 1).getString("_id");
-                System.out.println("Selected " + selectedGenre);
+                // pick one random movie
+                AggregateIterable<Document> query1 = movieCol.aggregate(Arrays.asList(new Document("$match",
+                        new Document("genres", genre)),
+                        new Document("$match", new Document("year", year)),
+                        new Document("$sample", new Document("size", 1L))));
 
-                // Randomly pick 1 movie from the selected year and genre
-                AggregateIterable<Document> yearMovieCursor = collection.aggregate(Arrays.asList(
-                    new Document("$match",
-                        new Document("year", yearValue)
-                        .append("genres", selectedGenre)),
-                    new Document("$sample", new Document("size", 1))
-                ));
-                Document yearMovie = yearMovieCursor.first();
+                // pick two older random movies
+                AggregateIterable<Document> query2 = movieCol.aggregate(Arrays.asList(new Document("$match",
+                        new Document("genres", genre)),
+                        new Document("$match", new Document("$and", Arrays.asList(
+                                new Document("year", new Document("$gt", year - 10)),
+                                new Document("year", new Document("$lt", year - 5))))),
+                        new Document("$sample",
+                                new Document("size", 2L))));
+                // save to list, shuffle
+                ArrayList<Document> quizList = query2.into(new ArrayList<Document>());
+                quizList.add(query1.first());
+                Collections.shuffle(quizList);
 
-                // Randomly pick 2 movies that are 5-10 years older, same genre
-                AggregateIterable<Document> olderMoviesCursor = collection.aggregate(Arrays.asList(
-                    new Document("$match",
-                        new Document("year", new Document("$gt", yearValue - 10)
-                                            .append("$lt", yearValue - 5))
-                        .append("genres", selectedGenre)),
-                    new Document("$sample", new Document("size", 2))
-                ));
-
-                ArrayList<Document> olderMovies = new ArrayList<>();
-                for (Document doc : olderMoviesCursor) {
-                    olderMovies.add(doc);
+                // print titles
+                for (int i = 0; i < quizList.size(); i++) {
+                    Document d = quizList.get(i);
+                    System.out.println((i + 1) + ": " + d.get("title").toString());
                 }
 
-                if (yearMovie == null) {
-                    System.out.println("No movie found for year " + yearValue + " in genre " + selectedGenre);
-                    keyScan.close();
-                    return;
-                }
-                if (olderMovies.size() < 2) {
-                    System.out.println("Not enough older movies (5-10 years older) found in genre " + selectedGenre);
-                    keyScan.close();
-                    return;
-                }
-
-                ArrayList<Document> movies = new ArrayList<>();
-                movies.add(yearMovie);
-                movies.addAll(olderMovies);
-                Collections.shuffle(movies);
-
-                // Empty print for newline
-                System.out.println();
-                for (Integer i = 0; i < movies.size(); i++) {
-                    Document m = movies.get(i);
-                    System.out.println((i + 1) + ": " + m.getString("title"));
-                }
-
-                System.out.println("Which movie was released in " + yearValue + "?");
-                Integer userGuess = keyScan.nextInt();
-
-                if (userGuess < 1 || userGuess > movies.size()) {
-                    System.out.println("Invalid choice.");
-                    keyScan.close();
-                    return;
-                }
-
-                Document guessedMovie = movies.get(userGuess - 1);
-                Integer guessedYear = guessedMovie.getInteger("year");
-
-                if (guessedYear == yearValue) {
+                // run the quiz
+                System.out.print("Which movie was not released in " + year + "?\n> ");
+                int movieNo = keyScan.nextInt();
+                if (quizList.get(movieNo - 1).get("year").toString().equals(Integer.toString(year))) {
                     System.out.println("Correct!");
                 } else {
                     System.out.println("Wrong!");
                 }
-
-                for (Document movie : movies) {
-                    String t = movie.getString("title");
-                    Integer y = movie.getInteger("year");
-                    System.out.println(t + " was released in " + y);
+                for (Document d : quizList) {
+                    System.out.println(d.get("title").toString() + " was released in " + d.get("year"));
                 }
 
-            
                 keyScan.close();
             } catch (MongoException e) {
                 e.printStackTrace();
